@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from datetime import datetime, timedelta
 from pathlib import Path
 import math, os, csv, statistics
@@ -267,7 +269,13 @@ def current_metrics(weather):
     return t,rh,w,s,hi,wb,ut,ht
 
 
-@app.get("/")
+FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
+
+@app.get("/", include_in_schema=False)
+def serve_frontend():
+    return FileResponse(FRONTEND_DIR / "index.html")
+
+@app.get("/api")
 def root():
     return {"name":"HeatHealthAI","status":"online","version":APP_VERSION,"endpoints":["/risk","/forecast","/hourly","/impact-forecast","/health-impact","/vulnerability","/hotspots","/action-plan","/emergency-priority","/interventions","/alerts/zone-population","/alerts/zone-dispatch","/alerts/send","/geocode","/reverse-geocode","/model-status","/health"]}
 
@@ -438,3 +446,7 @@ def send_alert(channel:str=Query(...),to:str=Query(...),location:str=Query("Sele
 
 @app.get("/health")
 def health(): return {"status":"healthy","version":APP_VERSION,"timestamp":datetime.now().isoformat(),"health_model":load_health_model()["status"],"weather_provider":"Open-Meteo with local fallback"}
+
+# Serve frontend static files — must be mounted AFTER all API routes
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")

@@ -1,14 +1,13 @@
 services:
-  # ── 1. Backend API (Web Service) ─────────────────────────────
   - type: web
-    name: heathealthai-api
+    name: heathealthai
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
-      # Optional Twilio credentials — set in the Render dashboard
+      # Optional — set in Render dashboard if you need SMS/WhatsApp alerts
       # - key: TWILIO_ACCOUNT_SID
       #   sync: false
       # - key: TWILIO_AUTH_TOKEN
@@ -18,17 +17,3 @@ services:
       # - key: TWILIO_WHATSAPP_FROM
       #   sync: false
     healthCheckPath: /health
-
-  # ── 2. Frontend (Static Site — free tier, never sleeps) ──────
-  - type: web
-    name: heathealthai
-    runtime: static
-    staticPublishPath: ./frontend
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: no-cache
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
