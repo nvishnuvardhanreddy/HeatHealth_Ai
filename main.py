@@ -1,7 +1,5 @@
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from datetime import datetime, timedelta
 from pathlib import Path
 import math, os, csv, statistics
@@ -269,15 +267,9 @@ def current_metrics(weather):
     return t,rh,w,s,hi,wb,ut,ht
 
 
-FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
-
-@app.get("/api")
+@app.get("/")
 def root():
     return {"name":"HeatHealthAI","status":"online","version":APP_VERSION,"endpoints":["/risk","/forecast","/hourly","/impact-forecast","/health-impact","/vulnerability","/hotspots","/action-plan","/emergency-priority","/interventions","/alerts/zone-population","/alerts/zone-dispatch","/alerts/send","/geocode","/reverse-geocode","/model-status","/health"]}
-
-@app.get("/", include_in_schema=False)
-def serve_frontend():
-    return FileResponse(FRONTEND_DIR / "index.html")
 
 @app.get("/model-status")
 def model_status():
@@ -446,7 +438,3 @@ def send_alert(channel:str=Query(...),to:str=Query(...),location:str=Query("Sele
 
 @app.get("/health")
 def health(): return {"status":"healthy","version":APP_VERSION,"timestamp":datetime.now().isoformat(),"health_model":load_health_model()["status"],"weather_provider":"Open-Meteo with local fallback"}
-
-# Mount static files AFTER all API routes so API routes take priority
-if FRONTEND_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")

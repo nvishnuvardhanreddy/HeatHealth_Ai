@@ -9,12 +9,13 @@
    API
 ============================================================ */
 
-// When deployed on Render both frontend and API share the same origin.
-// window.HEATHEALTHAI_API can still be set via a <script> tag to override.
+// When running locally use the local dev server.
+// On Render the frontend static site calls the separate backend web service.
+// window.HEATHEALTHAI_API can be set via a <script> tag to override.
 const API_URL = window.HEATHEALTHAI_API ||
     (location.hostname === "127.0.0.1" || location.hostname === "localhost"
         ? "http://127.0.0.1:8000"
-        : "");   // same-origin on Render
+        : "https://heathealthai-api.onrender.com");
 
 
 /* ============================================================
