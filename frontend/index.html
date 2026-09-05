@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        HeatHealthAI | Human Thermal Intelligence
+    </title>
+
+    <meta
+        name="description"
+        content="HeatHealthAI predicts how dangerous heat conditions are for people using human thermal intelligence."
+    >
+
+    <!-- Leaflet -->
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+
+    <!-- Application CSS -->
+
+    <link
+        rel="stylesheet"
+        href="style.css?v=789"
+    >
+
+</head>
+
+
+<body>
+
+
+<!-- =========================================================
+     APP
+========================================================== -->
+
+<div class="app-shell">
+
+
+    <!-- =====================================================
+         HEADER
+    ====================================================== -->
+
+    <header class="topbar">
+
+        <div class="brand">
+
+            <div class="brand-symbol">
+                H
+            </div>
+
+            <div>
+
+                <div class="brand-name">
+                    HeatHealthAI
+                </div>
+
+                <div class="brand-subtitle">
+                    HUMAN THERMAL INTELLIGENCE
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="system-status">
+
+            <span class="status-dot"></span>
+
+            SYSTEM ONLINE
+
+        </div>
+
+    </header>
+
+
+    <!-- =====================================================
+         HERO
+    ====================================================== -->
+
+    <section class="hero">
+
+        <div class="hero-content">
+
+            <div class="eyebrow">
+                NEXT-GENERATION HEAT HEALTH INTELLIGENCE
+            </div>
+
+            <h1>
+                Predicting
+                <span>how dangerous</span>
+                heat can become.
+            </h1>
+
+            <p>
+                HeatHealthAI combines temperature, humidity,
+                wind, solar radiation and human vulnerability
+                to estimate real-world thermal danger.
+            </p>
+            <div class="hero-status-line">
+                LIVE WEATHER → THERMAL STRESS → HEALTH RISK → ACTION
+            </div>
+
+            <div class="hero-model-note">
+                SIH PROTOTYPE • WEATHER-DRIVEN DECISION SUPPORT •
+                HEALTH INDICATORS REQUIRE LOCAL VALIDATION
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- =====================================================
+         LOCATION CONTROL
+    ====================================================== -->
+
+    <section class="control-panel">
+
+        <form id="analysisForm">
+
+            <div class="control-title">
+                LOCATION ANALYSIS
+            </div>
+
+
+            <div class="control-grid">
+
+                <div class="input-group">
+
+                    <label for="city">
+                        LOCATION
+                    </label>
+
+                    <input
+                        id="city"
+                        type="text"
+                        value="Visakhapatnam"
+                        placeholder="City / Location"
+                    >
+
+                </div>
+
+
+                <div class="input-group">
+
+                    <label for="latitude">
+                        LATITUDE
+                    </label>
+
+                    <input
+                        id="latitude"
+                        type="number"
+                        step="any"
+                        value="17.6868"
+                        placeholder="Latitude"
+                    >
+
+                </div>
+
+
+                <div class="input-group">
+
+                    <label for="longitude">
+                        LONGITUDE
+                    </label>
+
+                    <input
+                        id="longitude"
+                        type="number"
+                        step="any"
+                        value="83.2185"
+                        placeholder="Longitude"
+                    >
+
+                </div>
+
+
+                <button
+                    id="analyzeBtn"
+                    class="primary-button"
+                    type="submit"
+                >
+
+                    ANALYZE HEAT RISK
+
+                    <span>
+                        →
+                    </span>
+
+                </button>
+
+            </div>
+
+        </form>
+
+    </section>
+
+
+    <!-- =====================================================
+         MAIN DASHBOARD
+    ====================================================== -->
+
+    <main class="dashboard">
+
+
+        <!-- =================================================
+             LOCATION
+        ================================================== -->
+
+        <section class="location-strip">
+
+            <div>
+
+                <div class="small-label">
+                    SELECTED LOCATION
+                </div>
+
+                <div
+                    id="locationName"
+                    class="location-name"
+                >
+                    Visakhapatnam
+                </div>
+
+            </div>
+
+
+            <div
+                id="coordinates"
+                class="coordinates"
+            >
+                17.6868, 83.2185
+            </div>
+
+
+            <div class="updated">
+
+                LAST UPDATED
+
+                <strong id="lastUpdated">
+                    --
+                </strong>
+
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             PRIMARY RISK
+        ================================================== -->
+
+        <section class="risk-grid">
+
+
+            <div class="risk-card main-risk-card">
+
+                <div class="card-label">
+                    HUMAN THERMAL DANGER
+                </div>
+
+
+                <div class="risk-main">
+
+                    <div
+                        id="riskEmoji"
+                        class="risk-emoji"
+                    >
+                        🌡️
+                    </div>
+
+
+                    <div>
+
+                        <div
+                            id="riskLevel"
+                            class="risk-level"
+                        >
+                            ANALYZING
+                        </div>
+
+                        <div class="risk-caption">
+                            Human Thermal Stress Index
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="score-row">
+
+                    <div
+                        id="htsiScore"
+                        class="htsi-score"
+                    >
+                        --
+                    </div>
+
+                    <div class="score-max">
+                        / 100
+                    </div>
+
+                </div>
+
+
+                <div class="progress-track">
+
+                    <div
+                        id="riskProgress"
+                        class="progress-fill"
+                        style="width:0%"
+                    ></div>
+
+                </div>
+
+
+                <p
+                    id="riskMessage"
+                    class="risk-message"
+                >
+                    Analyzing current environmental conditions...
+                </p>
+
+            </div>
+
+
+            <!-- =================================================
+                 THERMAL METRICS
+            ================================================== -->
+
+            <div class="metric-card">
+
+                <div class="card-label">
+                    THERMAL INTELLIGENCE
+                </div>
+
+
+                <div class="metric-list">
+
+                    <div class="metric-row">
+
+                        <span>
+                            Heat Index
+                        </span>
+
+                        <strong>
+                            <span id="heatIndex">--</span>
+                            °C
+                        </strong>
+
+                    </div>
+
+
+                    <div class="metric-row">
+
+                        <span>
+                            WBGT
+                        </span>
+
+                        <strong>
+                            <span id="wbgt">--</span>
+                            °C
+                        </strong>
+
+                    </div>
+
+
+                    <div class="metric-row">
+
+                        <span>
+                            UTCI (estimate)
+                        </span>
+
+                        <strong>
+                            <span id="utci">--</span>
+                            °C
+                        </strong>
+
+                    </div>
+
+
+                    <div class="metric-row highlight-row">
+
+                        <span>
+                            HTSI
+                        </span>
+
+                        <strong>
+                            <span id="htsiThermal">--</span>
+                            /100
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- =================================================
+                 WEATHER
+            ================================================== -->
+
+            <div class="metric-card">
+
+                <div class="card-label">
+                    ENVIRONMENT
+                </div>
+
+
+                <div class="metric-list">
+
+                    <div class="metric-row">
+
+                        <span>
+                            Temperature
+                        </span>
+
+                        <strong>
+                            <span id="temperature">--</span>
+                            °C
+                        </strong>
+
+                    </div>
+
+
+                    <div class="metric-row">
+
+                        <span>
+                            Humidity
+                        </span>
+
+                        <strong>
+                            <span id="humidity">--</span>
+                            %
+                        </strong>
+
+                    </div>
+
+
+                    <div class="metric-row">
+
+                        <span>
+                            Wind
+                        </span>
+
+                        <strong>
+                            <span id="wind">--</span>
+                            km/h
+                        </strong>
+
+                    </div>
+
+
+                    <div class="metric-row">
+
+                        <span>
+                            Solar Radiation
+                        </span>
+
+                        <strong>
+                            <span id="solar">--</span>
+                            W/m²
+                        </strong>
+
+                    </div>
+
+
+                    <div class="metric-row">
+
+                        <span>
+                            Apparent Temperature
+                        </span>
+
+                        <strong>
+                            <span id="apparent">--</span>
+                            °C
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             HEALTH RISK
+        ================================================== -->
+
+        <section class="health-section">
+
+            <div class="section-heading">
+
+                <div>
+
+                    <div class="eyebrow">
+                        HUMAN IMPACT
+                    </div>
+
+                    <h2>
+                        Health Risk Intelligence
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="health-grid">
+
+
+                <div class="health-card">
+
+                    <div class="health-icon">
+                        ☣
+                    </div>
+
+                    <div>
+
+                        <span>
+                            MORTALITY RISK INDICATOR
+                        </span>
+
+                        <strong id="mortality">
+                            --
+                        </strong>
+
+                    </div>
+
+                </div>
+
+
+                <div class="health-card">
+
+                    <div class="health-icon">
+                        +
+                    </div>
+
+                    <div>
+
+                        <span>
+                            HOSPITALIZATION RISK INDICATOR
+                        </span>
+
+                        <strong id="hospitalization">
+                            --
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             ALERT
+        ================================================== -->
+
+        <section class="alert-panel">
+
+            <div class="alert-header">
+
+                <div>
+
+                    <div class="small-label">
+                        AUTOMATIC EARLY WARNING
+                    </div>
+
+                    <h2 id="alertTitle">
+                        Heat Health Status
+                    </h2>
+
+                </div>
+
+
+                <div class="alert-status">
+
+                    <span id="alertStatus">
+                        NORMAL
+                    </span>
+
+                    <small>
+                        PRIORITY
+                    </small>
+
+                    <strong id="alertPriority">
+                        ROUTINE
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <p id="alertMessage">
+                Waiting for analysis...
+            </p>
+
+
+            <ul id="alertActions">
+            </ul>
+
+        </section>
+
+
+        <!-- =================================================
+             HYPER-LOCAL PUBLIC WARNING
+        ================================================== -->
+
+        <section class="notification-panel zone-alert-panel">
+
+            <div class="section-heading notification-heading">
+                <div>
+                    <div class="eyebrow">STEP 3 • HYPER-LOCAL PUBLIC WARNING</div>
+                    <h2>Hyper-Local Area Emergency Alert</h2>
+                    <p>For the SIH demonstration, the system identifies the affected area, estimates its population, and simulates an area-wide public warning to every eligible person represented in that area.</p>
+                </div>
+                <div id="dispatchState" class="dispatch-state">READY</div>
+            </div>
+
+            <div class="zone-broadcast-panel">
+                <div class="section-heading">
+                    <div>
+                        <div class="eyebrow">AUTOMATIC TARGETING</div>
+                        <h3>Emergency Population Targeting</h3>
+                        <p>When an area is HIGH/EXTREME or forecast to become EXTREME, HeatHealthAI can identify the eligible population represented by that area.</p>
+                    </div>
+                </div>
+
+                <div class="zone-broadcast-controls">
+                    <label>
+                        AFFECTED AREA
+                        <select id="alertZone"></select>
+                    </label>
+
+                    <div class="zone-population-summary">
+                        <span>PEOPLE IN AFFECTED AREA</span>
+                        <strong id="zonePopulation">--</strong>
+                    </div>
+
+                    <button id="loadZonePopulationBtn" class="secondary-button" type="button">IDENTIFY AREA POPULATION</button>
+                    <button id="broadcastSmsBtn" class="secondary-button" type="button">SIMULATE SMS TO ALL</button>
+                    <button id="broadcastWhatsappBtn" class="secondary-button" type="button">SIMULATE WHATSAPP TO ALL</button>
+                </div>
+
+                <div id="zoneDispatchResult" class="dispatch-log">Select a zone to identify its demo population.</div>
+            </div>
+
+            <div class="demo-disclaimer">
+                <strong>SIH DEMO MODE:</strong> “All people in the area” means the synthetic/authorized population registry represented by this prototype. It does not discover private mobile-phone locations or claim real-world delivery to every person in a geographic area.
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             DRIVERS
+        ================================================== -->
+
+        <section class="section-block">
+
+            <div class="section-heading">
+
+                <div>
+
+                    <div class="eyebrow">
+                        EXPLAINABLE AI
+                    </div>
+
+                    <h2>
+                        What is driving the danger?
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div
+                id="drivers"
+                class="drivers-grid"
+            >
+
+                <div class="loading-inline">
+                    Waiting for analysis...
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+
+        <!-- =================================================
+             5-DAY HUMAN IMPACT FORECAST
+        ================================================== -->
+        <section class="section-block impact-section">
+
+            <div class="section-heading">
+                <div>
+                    <div class="eyebrow">
+                        PREDICTIVE HEALTH INTELLIGENCE
+                    </div>
+                    <h2>
+                        5-Day Human Impact Outlook
+                    </h2>
+                </div>
+
+                <div id="impactTrendBadge" class="impact-trend-badge">
+                    LOADING
+                </div>
+            </div>
+
+            <div class="impact-hero" id="impactHero">
+                <div class="loading-inline">
+                    Calculating future human thermal stress...
+                </div>
+            </div>
+
+            <div class="impact-grid" id="impactForecast">
+                <div class="loading-inline">
+                    Loading 5-day impact forecast...
+                </div>
+            </div>
+
+            <div class="impact-disclaimer" id="impactDisclaimer">
+                Health-impact values are 0–100 decision-support indicators, not clinical probabilities.
+                Operational prediction requires an authorised historical heat-health dataset, calibration,
+                retrospective validation and uncertainty intervals.
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             POPULATION VULNERABILITY
+        ================================================== -->
+        <section class="section-block vulnerability-section">
+
+            <div class="section-heading">
+                <div>
+                    <div class="eyebrow">
+                        POPULATION INTELLIGENCE
+                    </div>
+                    <h2>
+                        Vulnerability & Health Priority
+                    </h2>
+                </div>
+
+                <div class="vulnerability-badge">
+                    DEMO DATA · REPLACE WITH VALIDATED LOCAL DATA
+                </div>
+            </div>
+
+            <div class="vulnerability-summary" id="vulnerabilitySummary">
+                <div class="loading-inline">
+                    Loading population vulnerability...
+                </div>
+            </div>
+
+            <div class="table-wrapper vulnerability-table-wrapper">
+                <table class="vulnerability-table">
+                    <thead>
+                        <tr>
+                            <th>ZONE</th>
+                            <th>POPULATION</th>
+                            <th>ELDERLY</th>
+                            <th>OUTDOOR WORKERS</th>
+                            <th>EXPOSURE</th>
+                            <th>VULNERABILITY</th>
+                            <th>THERMAL</th>
+                            <th>PRIORITY</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vulnerabilityTable">
+                        <tr>
+                            <td colspan="8">Loading vulnerability intelligence...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </section>
+
+
+
+        <!-- =================================================
+             STEP 7 — AUTOMATED HEAT ACTION PLAN
+        ================================================== -->
+
+        <section class="section-block sih-command-section">
+
+            <div class="section-heading">
+                <div>
+                    <div class="eyebrow">STEP 7 · DECISION SUPPORT</div>
+                    <h2>Automated Heat Action Plan</h2>
+                </div>
+                <div id="actionPlanBadge" class="command-badge">WAITING</div>
+            </div>
+
+            <div class="command-grid">
+                <div id="actionPlanSummary" class="command-hero">
+                    Analyze a location to generate a recommended heat-action plan.
+                </div>
+
+                <div class="action-list-panel">
+                    <div class="panel-mini-title">RECOMMENDED ACTIONS</div>
+                    <div id="actionPlanList" class="action-list">
+                        <div class="loading-inline">Waiting for thermal analysis...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="command-note">
+                Recommendations are decision-support outputs for the SIH prototype.
+                Final activation remains with authorised municipal, health and disaster-management authorities.
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             STEP 8 — EMERGENCY PRIORITISATION
+        ================================================== -->
+
+        <section class="section-block sih-command-section">
+
+            <div class="section-heading">
+                <div>
+                    <div class="eyebrow">STEP 8 · EMERGENCY PRIORITISATION</div>
+                    <h2>Which Areas Need Help First?</h2>
+                </div>
+                <div id="priorityBadge" class="command-badge">WAITING</div>
+            </div>
+
+            <div id="priorityCards" class="priority-cards">
+                <div class="loading-inline">Waiting for analysis...</div>
+            </div>
+
+            <div class="table-wrapper command-table-wrapper">
+                <table class="command-table">
+                    <thead>
+                        <tr>
+                            <th>RANK</th>
+                            <th>AREA</th>
+                            <th>POPULATION</th>
+                            <th>VULNERABILITY</th>
+                            <th>EXPOSURE</th>
+                            <th>PRIORITY</th>
+                        </tr>
+                    </thead>
+                    <tbody id="priorityTable">
+                        <tr><td colspan="6">No priority data yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             STEP 9 — INTERVENTION COMMAND CENTRE
+        ================================================== -->
+
+        <section class="section-block sih-command-section">
+
+            <div class="section-heading">
+                <div>
+                    <div class="eyebrow">STEP 9 · HEAT ACTION COMMAND CENTRE</div>
+                    <h2>Pre-Emptive Intervention Triggers</h2>
+                </div>
+                <div id="interventionBadge" class="command-badge">WAITING</div>
+            </div>
+
+            <div id="interventionGrid" class="intervention-grid">
+                <div class="loading-inline">Waiting for analysis...</div>
+            </div>
+
+            <div class="intervention-flow">
+                <span>RISK DETECTED</span>
+                <b>→</b>
+                <span>AREA PRIORITISED</span>
+                <b>→</b>
+                <span>ACTION RECOMMENDED</span>
+                <b>→</b>
+                <span>AUTHORITY ACTIVATES PLAN</span>
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             MAP
+        ================================================== -->
+
+        <section class="section-block">
+
+            <div class="section-heading">
+
+                <div>
+
+                    <div class="eyebrow">
+                        GEOSPATIAL INTELLIGENCE
+                    </div>
+
+                    <h2>
+                        Live Thermal Risk Map
+                    </h2>
+
+                </div>
+
+                <div class="map-legend">
+
+                    <span>
+                        <i class="legend-dot low"></i>
+                        Low
+                    </span>
+
+                    <span>
+                        <i class="legend-dot moderate"></i>
+                        Moderate
+                    </span>
+
+                    <span>
+                        <i class="legend-dot high"></i>
+                        High
+                    </span>
+
+                    <span>
+                        <i class="legend-dot extreme"></i>
+                        Extreme
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <div
+                id="map"
+                class="map"
+            ></div>
+
+        </section>
+
+
+        <!-- =================================================
+             FORECAST
+        ================================================== -->
+
+        <section class="section-block">
+
+            <div class="section-heading">
+
+                <div>
+
+                    <div class="eyebrow">
+                        PREDICTIVE INTELLIGENCE
+                    </div>
+
+                    <h2>
+                        5-Day Heat Danger Forecast
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div
+                id="forecast"
+                class="forecast-grid"
+            >
+
+                <div class="loading-inline">
+                    Loading forecast...
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             HOURLY
+        ================================================== -->
+
+        <section class="section-block">
+
+            <div class="section-heading">
+
+                <div>
+
+                    <div class="eyebrow">
+                        HIGH-RESOLUTION MONITORING
+                    </div>
+
+                    <h2>
+                        Next 48 Hours
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="table-wrapper">
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+
+                            <th>
+                                TIME
+                            </th>
+
+                            <th>
+                                TEMP
+                            </th>
+
+                            <th>
+                                HUMIDITY
+                            </th>
+
+                            <th>
+                                WIND
+                            </th>
+
+                            <th>
+                                WBGT
+                            </th>
+
+                            <th>
+                                HTSI
+                            </th>
+
+                            <th>
+                                RISK
+                            </th>
+
+                        </tr>
+
+                    </thead>
+
+
+                    <tbody
+                        id="hourlyTable"
+                    >
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             HOTSPOTS
+        ================================================== -->
+
+        <section class="section-block">
+
+            <div class="section-heading">
+
+                <div>
+
+                    <div class="eyebrow">
+                        URBAN THERMAL INTELLIGENCE
+                    </div>
+
+                    <h2>
+                        Ward-Level Hotspots
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div
+                id="hotspots"
+                class="hotspots-grid"
+            >
+
+                <div class="loading-inline">
+                    Loading thermal hotspots...
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             WHAT IF
+        ================================================== -->
+
+        <section class="section-block">
+
+            <div class="section-heading">
+
+                <div>
+
+                    <div class="eyebrow">
+                        SCENARIO ENGINE
+                    </div>
+
+                    <h2>
+                        What-If Heat Simulation
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="simulation-layout">
+
+
+                <div class="simulation-controls">
+
+
+                    <div class="simulation-input">
+
+                        <label>
+                            Temperature °C
+                        </label>
+
+                        <input
+                            id="simTemperature"
+                            type="number"
+                            value="40"
+                            step="0.1"
+                        >
+
+                    </div>
+
+
+                    <div class="simulation-input">
+
+                        <label>
+                            Humidity %
+                        </label>
+
+                        <input
+                            id="simHumidity"
+                            type="number"
+                            value="70"
+                            step="1"
+                            min="0"
+                            max="100"
+                        >
+
+                    </div>
+
+
+                    <div class="simulation-input">
+
+                        <label>
+                            Wind m/s
+                        </label>
+
+                        <input
+                            id="simWind"
+                            type="number"
+                            value="2"
+                            step="0.1"
+                            min="0"
+                        >
+
+                    </div>
+
+
+                    <div class="simulation-input">
+
+                        <label>
+                            Solar W/m²
+                        </label>
+
+                        <input
+                            id="simSolar"
+                            type="number"
+                            value="700"
+                            step="10"
+                            min="0"
+                        >
+
+                    </div>
+
+
+                    <button
+                        id="simulateBtn"
+                        class="primary-button simulation-button"
+                        type="button"
+                    >
+                        RUN SIMULATION →
+                    </button>
+
+                </div>
+
+
+                <div
+                    id="simulationResult"
+                    class="simulation-result"
+                >
+
+                    <div class="simulation-placeholder">
+
+                        <div>
+                            ◇
+                        </div>
+
+                        Enter environmental conditions
+                        and run the scenario engine.
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+    </main>
+
+
+    <!-- =====================================================
+         FOOTER
+    ====================================================== -->
+
+    <section class="model-note">
+        <div class="model-note-title">MODEL TRANSPARENCY</div>
+        <p>
+            HeatHealthAI converts weather into a Human Thermal Stress Index. WBGT and UTCI are
+            transparent estimates in this SIH build; official validated formulations and measured
+            radiation/globe/psychrometric inputs should be used for operational deployment.
+            Mortality and hospitalization are 0–100 risk indicators, not clinical probabilities.
+            Historical health data, calibration, uncertainty analysis and retrospective validation
+            are required before operational use.
+        </p>
+    </section>
+
+
+    <footer>
+
+        <strong>
+            HeatHealthAI
+        </strong>
+
+        <span>
+            Human Thermal Intelligence & Early Warning System
+        </span>
+
+        <span>
+            Anits College Csd students
+        </span>
+
+    </footer>
+
+
+</div>
+
+
+<!-- =========================================================
+     LEAFLET
+========================================================== -->
+
+<script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+></script>
+
+
+<!-- =========================================================
+     APPLICATION
+========================================================== -->
+
+<script src="app.js?v=790"></script>
+
+</body>
+
+</html>

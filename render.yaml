@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: heathealthai
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      # Optional Twilio credentials — set these in the Render dashboard
+      # - key: TWILIO_ACCOUNT_SID
+      #   sync: false
+      # - key: TWILIO_AUTH_TOKEN
+      #   sync: false
+      # - key: TWILIO_SMS_FROM
+      #   sync: false
+      # - key: TWILIO_WHATSAPP_FROM
+      #   sync: false
+    healthCheckPath: /health
