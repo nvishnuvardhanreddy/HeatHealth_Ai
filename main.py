@@ -43,8 +43,8 @@ LOCATION_ALIASES = {
     "guwahati": "Guwahati, Assam, India",
 }
 
-RISK_COLORS = {"LOW":"#22c55e","MODERATE":"#eab308","HIGH":"#f97316","EXTREME":"#ef4444"}
-RISK_EMOJIS = {"LOW":"🟢","MODERATE":"🟡","HIGH":"🟠","EXTREME":"🔴"}
+RISK_COLORS = {"LOW":"#22c55e","MODERATE":"#eab308","HIGH":"#f97316","VERY HIGH":"#dc2626","EXTREME":"#ef4444"}
+RISK_EMOJIS = {"LOW":"🟢","MODERATE":"🟡","HIGH":"🟠","VERY HIGH":"🔴","EXTREME":"🔴"}
 
 # Demo demographic layers are explicitly labelled. Replace with municipal/GIS data in deployment.
 DEMO_AREAS = {
@@ -74,11 +74,25 @@ def round_value(v, digits=1):
 
 
 def risk_level(score):
+    """5-tier risk classification for current/observed conditions."""
     s = clamp(score)
     if s < 25: return "LOW"
     if s < 50: return "MODERATE"
-    if s < 75: return "HIGH"
+    if s < 70: return "HIGH"
+    if s < 85: return "VERY HIGH"
     return "EXTREME"
+
+
+def forecast_risk_level(score):
+    """Forecast risk capped at HIGH for the current SIH prototype.
+
+    The system does not yet have a trained/validated ML model, so forecast
+    risk should not claim VERY HIGH or EXTREME predictions.
+    """
+    s = clamp(score)
+    if s < 25: return "LOW"
+    if s < 50: return "MODERATE"
+    return "HIGH"
 
 
 def risk_message(level):
@@ -86,6 +100,7 @@ def risk_message(level):
         "LOW":"Thermal conditions are generally manageable for most healthy people.",
         "MODERATE":"Heat stress is increasing; vulnerable people may experience discomfort or dehydration.",
         "HIGH":"Dangerous heat stress is developing; prolonged exposure may increase heat-related illness.",
+        "VERY HIGH":"Very high thermal stress detected; outdoor exposure should be minimised.",
         "EXTREME":"Extreme human thermal danger detected; rapid protective action is recommended.",
     }.get(level, "Thermal conditions are being analyzed.")
 
@@ -255,18 +270,38 @@ def build_alert(location, htsi, health_score):
     return {"title":title,"status":status,"priority":priority,"message":f"{location}: {risk_message(risk_level(htsi))}","actions":["Hydration and cooling breaks","Protect elderly, children and outdoor workers","Adjust outdoor work during peak heat","Review cooling-centre, water and hospital readiness"],"channels":{"sms":{"status":"SIMULATION_READY"},"whatsapp":{"status":"SIMULATION_READY"}},"delivery_note":"Decision-support preview; real delivery requires an authorised provider and recipient registry."}
 
 
+def estimate_solar_radiation(hour):
+    if hour < 6 or hour > 19:
+        return 0.0
+    factor = math.sin((hour - 6) / 13.0 * math.pi)
+    return round(800.0 * max(0.0, factor), 1)
+
+
 def current_metrics(weather):
-    c=weather.get("current",{}); h=weather.get("hourly",{})
-    solar=c.get("shortwave_radiation")
+    c = weather.get("current", {})
+    h = weather.get("hourly", {})
+    solar = c.get("shortwave_radiation")
+    current_hour = datetime.now().hour
     if solar is None:
-        # Fallback: match the hourly slot for the current hour instead of always taking index 0 (midnight).
-        times=h.get("time") or []; current_time=c.get("time")
-        idx=times.index(current_time) if current_time in times else datetime.now().hour
-        idx=min(idx,len(h.get("shortwave_radiation",[])or[])-1) if h.get("shortwave_radiation") else -1
-        solar=(h.get("shortwave_radiation") or [0])[idx] if idx>=0 else 0
-    t=safe_float(c.get("temperature_2m"),35); rh=safe_float(c.get("relative_humidity_2m"),60); w=safe_float(c.get("wind_speed_10m"),10); s=safe_float(solar,0)
-    hi=calculate_heat_index(t,rh); wb=calculate_wbgt(t,rh,w,s); ut=calculate_utci_estimate(t,rh,w,s); ht=calculate_htsi(t,rh,w,s,hi,wb)
-    return t,rh,w,s,hi,wb,ut,ht
+        times = h.get("time") or []
+        current_time = c.get("time")
+        idx = times.index(current_time) if current_time in times else current_hour
+        idx = min(idx, len(h.get("shortwave_radiation", []) or []) - 1) if h.get("shortwave_radiation") else -1
+        solar = (h.get("shortwave_radiation") or [0])[idx] if idx >= 0 else None
+
+    # If solar is missing or unexpectedly 0 during peak daytime (8am to 5pm), compute realistic diurnal estimate
+    if solar is None or (solar == 0 and 8 <= current_hour <= 17):
+        solar = estimate_solar_radiation(current_hour)
+
+    t = safe_float(c.get("temperature_2m"), 35)
+    rh = safe_float(c.get("relative_humidity_2m"), 60)
+    w = safe_float(c.get("wind_speed_10m"), 10)
+    s = safe_float(solar, 0.0)
+    hi = calculate_heat_index(t, rh)
+    wb = calculate_wbgt(t, rh, w, s)
+    ut = calculate_utci_estimate(t, rh, w, s)
+    ht = calculate_htsi(t, rh, w, s, hi, wb)
+    return t, rh, w, s, hi, wb, ut, ht
 
 
 FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
@@ -297,8 +332,8 @@ def forecast(latitude:float=Query(...),longitude:float=Query(...)):
     weather=fetch_weather(latitude,longitude); d=weather.get("daily",{}); env=daily_environment(weather); result=[]
     n=min(5,len(d.get("time",[])),len(d.get("temperature_2m_max",[])))
     for i in range(n):
-        date=d["time"][i]; t=safe_float(d["temperature_2m_max"][i],35); w=safe_float((d.get("wind_speed_10m_max") or [10]*n)[i] if i<len(d.get("wind_speed_10m_max",[])) else 10,10); e=env.get(date,{"humidity":60,"solar":500}); rh,s=e["humidity"],e["solar"]; hi=calculate_heat_index(t,rh); wb=calculate_wbgt(t,rh,w,s); ht=calculate_htsi(t,rh,w,s,hi,wb); lev=risk_level(ht)
-        result.append({"date":date,"max":round_value(t,1),"min":round_value(d.get("temperature_2m_min",[t])[i] if i<len(d.get("temperature_2m_min",[])) else t,1),"apparent":round_value(d.get("apparent_temperature_max",[t])[i] if i<len(d.get("apparent_temperature_max",[])) else t,1),"rain":round_value(d.get("precipitation_sum",[0])[i] if i<len(d.get("precipitation_sum",[])) else 0,1),"wind":round_value(w,1),"humidity":rh,"solar":s,"heat_index":round_value(hi,1),"wbgt":round_value(wb,1),"htsi":round_value(ht,1),"risk":lev,"emoji":RISK_EMOJIS[lev]})
+        date=d["time"][i]; t=safe_float(d["temperature_2m_max"][i],35); w=safe_float((d.get("wind_speed_10m_max") or [10]*n)[i] if i<len(d.get("wind_speed_10m_max",[])) else 10,10); e=env.get(date,{"humidity":60,"solar":500}); rh,s=e["humidity"],e["solar"]; hi=calculate_heat_index(t,rh); wb=calculate_wbgt(t,rh,w,s); ht=calculate_htsi(t,rh,w,s,hi,wb); lev=forecast_risk_level(ht)
+        result.append({"date":date,"temperature":round_value(t,1),"max":round_value(t,1),"min":round_value(d.get("temperature_2m_min",[t])[i] if i<len(d.get("temperature_2m_min",[])) else t,1),"apparent":round_value(d.get("apparent_temperature_max",[t])[i] if i<len(d.get("apparent_temperature_max",[])) else t,1),"rain":round_value(d.get("precipitation_sum",[0])[i] if i<len(d.get("precipitation_sum",[])) else 0,1),"wind":round_value(w,1),"humidity":rh,"solar":s,"heat_index":round_value(hi,1),"wbgt":round_value(wb,1),"htsi":round_value(ht,1),"risk":lev,"emoji":RISK_EMOJIS.get(lev,"🟡")})
     return {"forecast":result,"weather_source":weather.get("_weather_source"),"weather_fallback":weather.get("_weather_fallback",False)}
 
 @app.get("/hourly")
@@ -323,9 +358,15 @@ def health_impact(latitude:float=Query(...),longitude:float=Query(...)):
 def impact_forecast(latitude:float=Query(...),longitude:float=Query(...)):
     f=forecast(latitude,longitude)["forecast"]; v=calculate_vulnerability_score(14,22,31250,88,18); rows=[]
     for i,x in enumerate(f):
-        p=health_priority(x["htsi"],v); h=health_indicator(x["htsi"],v); rows.append({**x,"thermal_risk":x["risk"],"day_index":i,"label":"TODAY" if i==0 else f"+{i} DAY","utci":round_value(calculate_utci_estimate(x["max"],x["humidity"],x["wind"],x["solar"]),1),"vulnerability_score":v,"priority_score":p["score"],"priority_level":p["level"],"hospitalization_indicator":h["hospitalization"],"mortality_indicator":h["mortality"],"health_impact_level":risk_level(h["health_score"]),"action":"ACTIVATE HEAT ACTION PLAN" if p["level"] in {"CRITICAL","URGENT"} else "PREPARE TARGETED ACTIONS" if p["level"]=="HIGH" else "MONITOR + PREPARE" if p["level"]=="WATCH" else "ROUTINE MONITORING"})
+        # Use forecast_risk_level to cap at HIGH for prototype display
+        fc_risk=forecast_risk_level(x["htsi"])
+        p=health_priority(x["htsi"],v); h=health_indicator(x["htsi"],v)
+        rows.append({**x,"temperature":x.get("temperature",x.get("max",0)),"thermal_risk":fc_risk,"day_index":i,"label":"TODAY" if i==0 else f"+{i} DAY","utci":round_value(calculate_utci_estimate(x.get("max",x.get("temperature",35)),x["humidity"],x["wind"],x["solar"]),1),"vulnerability_score":v,"priority_score":p["score"],"priority_level":p["level"],"hospitalization_indicator":h["hospitalization"],"mortality_indicator":h["mortality"],"health_impact_level":forecast_risk_level(h["health_score"]),"emoji":RISK_EMOJIS.get(fc_risk,"🟡"),"action":"PREPARE TARGETED ACTIONS" if p["level"] in {"CRITICAL","URGENT","HIGH"} else "MONITOR + PREPARE" if p["level"]=="WATCH" else "ROUTINE MONITORING"})
     change=(rows[-1]["htsi"]-rows[0]["htsi"]) if len(rows)>1 else 0; direction="RISING" if change>=7 else "FALLING" if change<=-7 else "STABLE"; peak=max(rows,key=lambda z:z["priority_score"],default=None)
-    return {"forecast":rows,"trend":{"direction":direction,"change":round_value(change,1)},"peak":peak,"early_warning":{"status":peak["thermal_risk"] if peak else "LOW","label":"EXTREME FORECAST" if peak and peak["thermal_risk"]=="EXTREME" else "HIGH-RISK FORECAST" if peak and peak["thermal_risk"]=="HIGH" else "FORECAST MONITORING","days_ahead":peak["day_index"] if peak else None,"action":peak["action"] if peak else "MONITOR"},"vulnerability_score":v,"data_status":"WEATHER FORECAST + DECISION-SUPPORT HEALTH INDICATOR","warning":"Health indicators are not validated epidemiological probabilities. Supply historical health data and calibrate before operational use."}
+    # Cap early-warning labels — no EXTREME claims for the SIH prototype forecast
+    peak_risk=peak["thermal_risk"] if peak else "LOW"
+    ew_label="HIGH-RISK FORECAST" if peak_risk=="HIGH" else "FORECAST MONITORING"
+    return {"forecast":rows,"trend":{"direction":direction,"change":round_value(change,1)},"peak":peak,"early_warning":{"status":peak_risk,"label":ew_label,"days_ahead":peak["day_index"] if peak else None,"action":peak["action"] if peak else "MONITOR"},"vulnerability_score":v,"data_status":"WEATHER FORECAST + DECISION-SUPPORT HEALTH INDICATOR","warning":"Forecast thermal risk is an estimate for decision support. Health indicators are not validated epidemiological probabilities."}
 
 @app.get("/vulnerability")
 def vulnerability(latitude:float=Query(...),longitude:float=Query(...),location:str=Query("Selected Location")):
@@ -341,7 +382,7 @@ def vulnerability(latitude:float=Query(...),longitude:float=Query(...),location:
 def hotspots(latitude:float=Query(...),longitude:float=Query(...)):
     offsets=[("Central Urban Zone",0,0), ("North Residential Zone",.035,0), ("East Commercial Zone",0,.045),("South Industrial Zone",-.04,0),("West Dense Settlement",0,-.045)]; out=[]
     for name,dy,dx in offsets:
-        t=39+abs(dy)*20+abs(dx)*10; rh=65+min(10,abs(dx)*100); w=7; s=650; hi=calculate_heat_index(t,rh); wb=calculate_wbgt(t,rh,w,s); ht=calculate_htsi(t,rh,w,s,hi,wb); lev=risk_level(ht); out.append({"name":name,"latitude":latitude+dy,"longitude":longitude+dx,"temperature":round_value(t,1),"humidity":round_value(rh,1),"wind":w,"solar":s,"htsi":round_value(ht,1),"risk":lev,"data_status":"DEMO OFFSET — NOT REAL WARD GIS"})
+        t=39+abs(dy)*20+abs(dx)*10; rh=65+min(10,abs(dx)*100); w=7; s=650; hi=calculate_heat_index(t,rh); wb=calculate_wbgt(t,rh,w,s); ht=calculate_htsi(t,rh,w,s,hi,wb); lev=risk_level(ht); out.append({"name":name,"latitude":latitude+dy,"longitude":longitude+dx,"temperature":round_value(t,1),"humidity":round_value(rh,1),"wind":w,"solar":s,"htsi":round_value(ht,1),"risk":lev,"emoji":RISK_EMOJIS.get(lev,"🟡"),"data_status":"DEMO OFFSET — NOT REAL WARD GIS"})
     return {"hotspots":out,"warning":"Hotspot geometry is synthetic for SIH demonstration. Replace with authorised ward polygons and local observations/forecast grids."}
 
 @app.get("/action-plan")

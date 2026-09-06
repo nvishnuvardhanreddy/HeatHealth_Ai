@@ -38,6 +38,7 @@ const RISK_COLORS = {
     LOW: "#22c55e",
     MODERATE: "#eab308",
     HIGH: "#f97316",
+    "VERY HIGH": "#dc2626",
     EXTREME: "#ef4444"
 };
 
@@ -46,6 +47,7 @@ const RISK_BG = {
     LOW: "rgba(34,197,94,0.10)",
     MODERATE: "rgba(234,179,8,0.10)",
     HIGH: "rgba(249,115,22,0.10)",
+    "VERY HIGH": "rgba(220,38,38,0.10)",
     EXTREME: "rgba(239,68,68,0.10)"
 };
 
@@ -54,8 +56,77 @@ const RISK_EMOJIS = {
     LOW: "🟢",
     MODERATE: "🟡",
     HIGH: "🟠",
+    "VERY HIGH": "🔴",
     EXTREME: "🔴"
 };
+
+
+/* ============================================================
+   SAFE NUMBER VALIDATION
+============================================================ */
+
+/**
+ * Safely convert any value to a finite number.
+ * Returns fallback (default null) for null, undefined, NaN, Infinity, empty string, etc.
+ */
+function safeNumber(value, fallback = null) {
+    if (value === null || value === undefined || value === "") return fallback;
+    if (typeof value === "string") {
+        const trimmed = value.replace(/,/g, "").trim();
+        if (trimmed === "" || trimmed === "NaN" || trimmed === "null" || trimmed === "undefined") return fallback;
+        const parsed = Number(trimmed);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+    const num = Number(value);
+    return Number.isFinite(num) ? num : fallback;
+}
+
+/**
+ * Clamp HTSI to 0–100 range, returning fallback if not finite.
+ */
+function safeHTSI(value, fallback = 0) {
+    const num = safeNumber(value, fallback);
+    return Math.max(0, Math.min(100, num));
+}
+
+
+/* ============================================================
+   CENTRALIZED RISK CLASSIFICATION
+============================================================ */
+
+/**
+ * 5-tier risk classification matching backend thresholds.
+ * Used for current/observed conditions and hotspots.
+ * Always returns a valid string, never undefined.
+ */
+function getRiskLevel(htsi) {
+    const value = safeNumber(htsi, 0);
+    if (value < 25) return "LOW";
+    if (value < 50) return "MODERATE";
+    if (value < 70) return "HIGH";
+    if (value < 85) return "VERY HIGH";
+    return "EXTREME";
+}
+
+/**
+ * Forecast risk capped at HIGH for the SIH prototype.
+ * Future forecasts should not claim VERY HIGH or EXTREME without a validated ML model.
+ */
+function getForecastRiskLevel(htsi) {
+    const value = safeNumber(htsi, 0);
+    if (value < 25) return "LOW";
+    if (value < 50) return "MODERATE";
+    return "HIGH";
+}
+
+/**
+ * Safe display for numeric values. Returns formatted string or "Data unavailable".
+ */
+function safeDisplay(value, digits = 1, suffix = "") {
+    const num = safeNumber(value);
+    if (num === null) return "Data unavailable";
+    return num.toFixed(digits) + suffix;
+}
 
 
 /* ============================================================
@@ -100,7 +171,7 @@ function getRiskColor(level) {
 
 
 function getRiskEmoji(level) {
-    return RISK_EMOJIS[level] || "🌡️";
+    return RISK_EMOJIS[level] || RISK_EMOJIS[getRiskLevel(0)] || "🌡️";
 }
 
 
@@ -264,10 +335,8 @@ function renderHotspotMap(
     hotspots.forEach(
         hotspot => {
 
-            const color =
-                getRiskColor(
-                    hotspot.risk
-                );
+            const riskLevel = hotspot.risk || getRiskLevel(safeNumber(hotspot.htsi, 0));
+            const color = getRiskColor(riskLevel);
 
 
             const marker =
@@ -310,7 +379,7 @@ function renderHotspotMap(
                         <strong
                             style="color:${color}"
                         >
-                            ${hotspot.risk}
+                            ${riskLevel}
                         </strong>
                     </div>
 
@@ -597,11 +666,10 @@ async function analyzeLocation() {
         ]);
 
         // SIH STEPS 7–9: decision support, prioritisation and intervention triggers.
-        await Promise.all([
-            loadActionPlan(data),
-            loadEmergencyPriority(),
-            loadInterventions()
-        ]);
+        await loadActionPlan(data);
+        await loadEmergencyPriority();
+        // Pass riskData to interventions so it uses the same HTSI as actions
+        await loadInterventions(data);
 
         // Ensure the map and selected marker follow the same coordinates.
         const finalLevel =
@@ -654,66 +722,6 @@ async function loadActionPlan(riskData) {
     if (!summary || !list) return;
 
     // ============================================================
-    // SAFE NUMBER CONVERTER
-    // Prevents NaN from being sent to FastAPI.
-    // Supports:
-    //   44
-    //   "44"
-    //   "44%"
-    //   { indicator: 44 }
-    // ============================================================
-
-    const safeNumber = (value, fallback = 0) => {
-
-        if (value === null || value === undefined) {
-            return fallback;
-        }
-
-        if (typeof value === "number") {
-            return Number.isFinite(value) ? value : fallback;
-        }
-
-        if (typeof value === "object") {
-            if ("indicator" in value) {
-                return safeNumber(value.indicator, fallback);
-            }
-
-            if ("value" in value) {
-                return safeNumber(value.value, fallback);
-            }
-
-            return fallback;
-        }
-
-        if (typeof value === "string") {
-
-            const cleaned = value
-                .replace(/,/g, "")
-                .replace(/%/g, "")
-                .trim();
-
-            const match = cleaned.match(/-?\d+(?:\.\d+)?/);
-
-            if (!match) {
-                return fallback;
-            }
-
-            const parsed = Number(match[0]);
-
-            return Number.isFinite(parsed)
-                ? parsed
-                : fallback;
-        }
-
-        const parsed = Number(value);
-
-        return Number.isFinite(parsed)
-            ? parsed
-            : fallback;
-    };
-
-
-    // ============================================================
     // HTSI
     // ============================================================
 
@@ -740,22 +748,13 @@ async function loadActionPlan(riskData) {
 
     // ============================================================
     // MORTALITY
-    //
-    // Supports both:
-    //   health.mortality = 12.5
-    //
-    // and:
-    //   health.mortality = { indicator: 12.5 }
     // ============================================================
 
-    const mortalityRaw =
+    const mortality = safeNumber(
         riskData?.health?.mortality?.indicator ??
         riskData?.health?.mortality ??
         $("mortality")?.textContent ??
-        0;
-
-    const mortality = safeNumber(
-        mortalityRaw,
+        0,
         0
     );
 
@@ -764,14 +763,11 @@ async function loadActionPlan(riskData) {
     // HOSPITALIZATION
     // ============================================================
 
-    const hospitalizationRaw =
+    const hospitalization = safeNumber(
         riskData?.health?.hospitalization?.indicator ??
         riskData?.health?.hospitalization ??
         $("hospitalization")?.textContent ??
-        0;
-
-    const hospitalization = safeNumber(
-        hospitalizationRaw,
+        0,
         0
     );
 
@@ -788,7 +784,6 @@ async function loadActionPlan(riskData) {
 
     // ============================================================
     // DEBUG
-    // Check browser console after clicking ANALYZE.
     // ============================================================
 
     console.log(
@@ -820,7 +815,6 @@ async function loadActionPlan(riskData) {
             "STEP 7 INVALID INPUT:",
             {
                 htsi,
-                priority,
                 mortality,
                 hospitalization,
                 population
@@ -1010,26 +1004,40 @@ async function loadActionPlan(riskData) {
 
 
         // ========================================================
-        // RECOMMENDED ACTIONS
+        // RECOMMENDED ACTIONS (from centralized catalog)
         // ========================================================
 
         if (list) {
 
-            const actions = Array.isArray(data.actions)
+            // Compute recommended actions from the centralized catalog using HTSI
+            lastRecommendedActions = getRecommendedActionIds(htsi);
+
+            // Also use backend actions as supplementary display
+            const backendActions = Array.isArray(data.actions)
                 ? data.actions
                 : [];
 
-            if (actions.length === 0) {
+            // Build the display from the centralized catalog,
+            // showing which actions are active based on current HTSI
+            const catalogActions = ACTION_CATALOG.filter(
+                action => lastRecommendedActions.has(action.id)
+            );
+
+            if (catalogActions.length === 0 && backendActions.length === 0) {
 
                 list.innerHTML = `
                     <div class="error-state">
-                        No specific actions returned.
+                        No specific actions required at current risk level.
                     </div>
                 `;
 
             } else {
+                // Use catalog actions as primary, fall back to backend
+                const displayActions = catalogActions.length > 0
+                    ? catalogActions.map(a => a.title)
+                    : backendActions;
 
-                list.innerHTML = actions
+                list.innerHTML = displayActions
                     .map((action, index) => `
                         <div class="action-item">
 
@@ -1038,7 +1046,7 @@ async function loadActionPlan(riskData) {
                             </span>
 
                             <p>
-                                ${escapeHtml(String(action))}
+                                ${escapeHtml(String(typeof action === "object" ? action.title || action : action))}
                             </p>
 
                         </div>
@@ -1167,56 +1175,138 @@ async function loadEmergencyPriority() {
 
 
 /* ============================================================
+   CENTRALIZED ACTION/RECOMMENDATION CATALOG
+============================================================ */
+
+const ACTION_CATALOG = [
+    {
+        id: "monitor_conditions",
+        title: "Monitor thermal conditions",
+        authority: "All Authorities",
+        trigger: "MODERATE heat risk",
+        minHtsi: 25,
+        category: "monitoring"
+    },
+    {
+        id: "hydration_cooling",
+        title: "Promote hydration and cooling breaks",
+        authority: "Health / Municipal Authority",
+        trigger: "MODERATE heat risk",
+        minHtsi: 25,
+        category: "prevention"
+    },
+    {
+        id: "water_supply",
+        title: "Verify drinking-water supply",
+        authority: "Municipal / Water Authority",
+        trigger: "MODERATE / HIGH heat risk",
+        minHtsi: 35,
+        category: "infrastructure"
+    },
+    {
+        id: "vulnerable_checks",
+        title: "Prioritise vulnerable-population checks",
+        authority: "Health / Community Teams",
+        trigger: "MODERATE / HIGH vulnerability + heat risk",
+        minHtsi: 35,
+        category: "protection"
+    },
+    {
+        id: "cooling_centres",
+        title: "Activate cooling centres",
+        authority: "Municipal Corporation",
+        trigger: "HIGH heat risk",
+        minHtsi: 50,
+        category: "infrastructure"
+    },
+    {
+        id: "outdoor_work",
+        title: "Adjust outdoor-work hours",
+        authority: "Labour / Municipal Authority",
+        trigger: "HIGH thermal stress",
+        minHtsi: 50,
+        category: "regulation"
+    },
+    {
+        id: "hospital_preparedness",
+        title: "Increase hospital preparedness",
+        authority: "Health Department",
+        trigger: "HIGH health-impact risk",
+        minHtsi: 50,
+        category: "health"
+    },
+    {
+        id: "power_grid",
+        title: "Review power-grid readiness",
+        authority: "Power Utility",
+        trigger: "HIGH heat / high cooling demand",
+        minHtsi: 60,
+        category: "infrastructure"
+    }
+];
+
+/**
+ * Determine which actions from ACTION_CATALOG are RECOMMENDED
+ * based on the current HTSI score.
+ * Returns a Set of action IDs that are active.
+ */
+function getRecommendedActionIds(htsi) {
+    const score = safeHTSI(htsi);
+    const active = new Set();
+    for (const action of ACTION_CATALOG) {
+        if (score >= action.minHtsi) {
+            active.add(action.id);
+        }
+    }
+    return active;
+}
+
+// Shared state so both Action Plan and Interventions read the same data.
+let lastRecommendedActions = new Set();
+
+
+/* ============================================================
    SIH STEP 9 — INTERVENTION COMMAND CENTRE
 ============================================================ */
 
-async function loadInterventions() {
+async function loadInterventions(riskData) {
     const grid = $("interventionGrid");
     const badge = $("interventionBadge");
 
     if (!grid) return;
 
-    const htsi = Number($("htsiScore")?.textContent || 0) || 0;
-    const priority = String($("alertPriority")?.textContent || "ROUTINE").toUpperCase();
+    const htsi = safeNumber(
+        riskData?.risk?.score ??
+        riskData?.thermal?.htsi ??
+        $("htsiScore")?.textContent,
+        0
+    );
 
-    try {
-        const response = await fetch(
-            `${API_URL}/interventions` +
-            `?htsi=${encodeURIComponent(htsi)}` +
-            `&priority=${encodeURIComponent(priority)}`
-        );
+    // Use the same centralized catalog and the shared recommended set
+    const recommended = lastRecommendedActions.size > 0
+        ? lastRecommendedActions
+        : getRecommendedActionIds(htsi);
 
-        if (!response.ok) throw new Error(`Intervention HTTP ${response.status}`);
-
-        const data = await response.json();
-        const recommended = new Set(data.recommended || []);
-        const catalog = data.catalog || {};
-
-        if (badge) {
-            badge.textContent = data.status || "MONITOR";
-        }
-
-        grid.innerHTML = Object.entries(catalog).map(([code, item]) => {
-            const active = recommended.has(code);
-            return `
-                <div class="intervention-card ${active ? "active" : ""}">
-                    <div class="intervention-icon">${active ? "✓" : "○"}</div>
-                    <div class="intervention-content">
-                        <strong>${escapeHtml(item.title)}</strong>
-                        <span>${escapeHtml(item.owner)}</span>
-                        <small>${escapeHtml(item.trigger)}</small>
-                    </div>
-                    <div class="intervention-status">
-                        ${active ? "RECOMMENDED" : "STANDBY"}
-                    </div>
-                </div>
-            `;
-        }).join("");
-    } catch (error) {
-        console.error("Intervention load failed:", error);
-        if (badge) badge.textContent = "OFFLINE";
-        grid.innerHTML = `<div class="error-state">Intervention engine unavailable.</div>`;
+    if (badge) {
+        badge.textContent = recommended.size > 0 ? "ACTION_REQUIRED" : "MONITOR";
     }
+
+    grid.innerHTML = ACTION_CATALOG.map(action => {
+        const active = recommended.has(action.id);
+        return `
+            <div class="intervention-card ${active ? "active" : ""}">
+                <div class="intervention-icon">${active ? "✓" : "○"}</div>
+                <div class="intervention-content">
+                    <strong>${escapeHtml(action.title)}</strong>
+                    <span>${escapeHtml(action.authority)}</span>
+                    <small>${escapeHtml(action.trigger)}</small>
+                </div>
+                <div class="intervention-status">
+                    ${active ? "RECOMMENDED" : "STANDBY"}
+                </div>
+            </div>
+        `;
+    }).join("");
 }
 
 
@@ -1834,16 +1924,23 @@ function renderForecast(
         days.map(
             day => {
 
+                const riskLevel = day.risk || getForecastRiskLevel(safeNumber(day.htsi, 0));
                 const color =
-                    getRiskColor(
-                        day.risk
-                    );
+                    getRiskColor(riskLevel);
+                const emoji = day.emoji || getRiskEmoji(riskLevel);
 
 
                 const date =
                     formatDate(
                         day.date
                     );
+
+                const tempVal = safeNumber(day.temperature) ?? safeNumber(day.max);
+                const tempDisplay = tempVal !== null ? tempVal.toFixed(1) + "°" : "Data unavailable";
+                const minVal = safeNumber(day.min);
+                const minDisplay = minVal !== null ? minVal.toFixed(1) + "°C" : "--";
+                const apparentVal = safeNumber(day.apparent);
+                const apparentDisplay = apparentVal !== null ? apparentVal.toFixed(1) + "°C" : "--";
 
 
                 return `
@@ -1862,29 +1959,23 @@ function renderForecast(
                         <div
                             class="forecast-temp"
                         >
-                            ${formatNumber(
-                                day.max
-                            )}°
+                            ${tempDisplay}
                         </div>
 
                         <div class="forecast-min">
                             Low
-                            ${formatNumber(
-                                day.min
-                            )}°C
+                            ${minDisplay}
                         </div>
 
                         <div class="forecast-apparent">
                             Feels like
-                            ${formatNumber(
-                                day.apparent
-                            )}°C
+                            ${apparentDisplay}
                         </div>
 
                         <div class="forecast-metric">
 
                             <span>
-                                HTSI
+                                Estimated HTSI
                             </span>
 
                             <strong>
@@ -1916,8 +2007,8 @@ function renderForecast(
                                 color:${color};
                             "
                         >
-                            ${day.emoji}
-                            ${day.risk}
+                            ${emoji}
+                            ${riskLevel}
                         </div>
 
                     </div>
@@ -2146,10 +2237,9 @@ function renderHotspots(
         hotspots.slice(1);
 
 
+    const topRisk = top.risk || getRiskLevel(safeNumber(top.htsi, 0));
     const topColor =
-        getRiskColor(
-            top.risk
-        );
+        getRiskColor(topRisk);
 
 
     let html = `
@@ -2159,7 +2249,7 @@ function renderHotspots(
                 border-color:
                 ${topColor}55;
                 background:
-                ${RISK_BG[top.risk] || RISK_BG.LOW};
+                ${RISK_BG[topRisk] || RISK_BG.LOW};
             "
         >
 
@@ -2192,7 +2282,7 @@ function renderHotspots(
                     color:${topColor};
                 "
             >
-                ${top.risk}
+                ${topRisk}
                 ·
                 ${formatNumber(
                     top.htsi,
@@ -2207,11 +2297,10 @@ function renderHotspots(
     html += remaining.map(
         hotspot => {
 
+            const riskLevel = hotspot.risk || getRiskLevel(safeNumber(hotspot.htsi, 0));
             const color =
-                getRiskColor(
-                    hotspot.risk
-                );
-
+                getRiskColor(riskLevel);
+            const emoji = hotspot.emoji || getRiskEmoji(riskLevel);
 
             return `
                 <div
@@ -2253,8 +2342,8 @@ function renderHotspots(
                             color:${color};
                         "
                     >
-                        ${hotspot.emoji}
-                        ${hotspot.risk}
+                        ${emoji}
+                        ${riskLevel}
                     </div>
 
                 </div>
@@ -2466,7 +2555,11 @@ function renderImpactForecast(data) {
     }
 
     container.innerHTML = rows.map(row => {
-        const color = getRiskColor(row.thermal_risk);
+        const riskLevel = row.thermal_risk || getForecastRiskLevel(safeNumber(row.htsi, 0));
+        const color = getRiskColor(riskLevel);
+        const emoji = row.emoji || getRiskEmoji(riskLevel);
+        const tempVal = safeNumber(row.temperature) ?? safeNumber(row.max);
+        const tempDisplay = tempVal !== null ? tempVal.toFixed(1) + "°C" : "Data unavailable";
 
         return `
             <div class="impact-day-card">
@@ -2490,8 +2583,8 @@ function renderImpactForecast(data) {
                     class="impact-risk"
                     style="color:${color}"
                 >
-                    ${row.emoji}
-                    ${escapeHtml(row.thermal_risk)}
+                    ${emoji}
+                    ${escapeHtml(riskLevel)}
                 </div>
 
                 <div class="impact-mini-metrics">
@@ -2499,21 +2592,21 @@ function renderImpactForecast(data) {
                     <div class="impact-mini-metric">
                         <span>TEMP</span>
                         <strong>
-                            ${formatNumber(row.temperature, 1)}°C
+                            ${tempDisplay}
                         </strong>
                     </div>
 
                     <div class="impact-mini-metric">
                         <span>HUMIDITY</span>
                         <strong>
-                            ${formatNumber(row.humidity, 0)}%
+                            ${safeDisplay(row.humidity, 0, "%")}
                         </strong>
                     </div>
 
                     <div class="impact-mini-metric">
                         <span>WBGT (proxy)</span>
                         <strong>
-                            ${formatNumber(row.wbgt, 1)}°C
+                            ${safeDisplay(row.wbgt, 1, "°C")}
                         </strong>
                     </div>
 
@@ -2522,28 +2615,28 @@ function renderImpactForecast(data) {
                         <strong
                             style="color:${getPriorityColor(row.priority_level)}"
                         >
-                            ${escapeHtml(row.priority_level)}
+                            ${escapeHtml(row.priority_level || "ROUTINE")}
                         </strong>
                     </div>
 
                     <div class="impact-mini-metric">
                         <span>HOSPITAL IND.</span>
                         <strong>
-                            ${formatNumber(row.hospitalization_indicator, 0)}%
+                            ${safeDisplay(row.hospitalization_indicator, 0, "%")}
                         </strong>
                     </div>
 
                     <div class="impact-mini-metric">
                         <span>MORTALITY IND.</span>
                         <strong>
-                            ${formatNumber(row.mortality_indicator, 0)}%
+                            ${safeDisplay(row.mortality_indicator, 0, "%")}
                         </strong>
                     </div>
 
                 </div>
 
                 <div class="impact-action">
-                    ${escapeHtml(row.action)}
+                    ${escapeHtml(row.action || "MONITOR")}
                 </div>
 
             </div>
